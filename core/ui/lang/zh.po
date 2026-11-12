@@ -646,7 +646,7 @@ msgstr "立即发送位置"
 msgid "Automatic beacons"
 msgstr "自动信标"
 
-#: core/ui/ui_aprs.c
+#: core/ui/ui_aprs.c core/ui/ui_menus.c
 msgid "Frequency"
 msgstr "频率"
 
@@ -2571,6 +2571,10 @@ msgid "Zones/Chs Received"
 msgstr "收到的区域/信道"
 
 #: core/ui/ui_menus.c
+msgid "Tone find"
+msgstr "扫亚音"
+
+#: core/ui/ui_menus.c
 msgid "Dual watch"
 msgstr "双守候"
 
@@ -3193,6 +3197,42 @@ msgstr "扫描停在此处"
 #: core/ui/ui_menus.c
 msgid "Edit scan lists in qdmr"
 msgstr "在 qdmr 中编辑扫描列表"
+
+#: core/ui/ui_menus.c
+msgid "Search"
+msgstr "搜索"
+
+#: core/ui/ui_menus.c
+msgid "Sub-audio"
+msgstr "亚音"
+
+#: core/ui/ui_menus.c
+msgid "Save channel"
+msgstr "保存信道"
+
+#: core/ui/ui_menus.c
+msgid "Start"
+msgstr "开始"
+
+#: core/ui/ui_menus.c
+msgid "Found"
+msgstr "已找到"
+
+#: core/ui/ui_menus.c
+msgid "Not while transmitting"
+msgstr "发射时不可用"
+
+#: core/ui/ui_menus.c
+msgid "Nothing found yet"
+msgstr "尚未找到"
+
+#: core/ui/ui_menus.c
+msgid "Channel saved"
+msgstr "信道已保存"
+
+#: core/ui/ui_menus.c
+msgid "Save failed"
+msgstr "保存失败"
 
 #: core/ui/ui_menus.c
 msgid "In use"

@@ -196,3 +196,25 @@ marked with an arrow.
 [Design and layouts for every display](../ux/dual-watch.md)
 
 The radio core can also scan a VFO range set by two frequencies. There is no menu item for that yet.
+
+## Tone find
+
+**OK**, **6** (Tools), scroll down to **Tone find**, **OK** finds an FM signal whose frequency and sub-audio tone you
+don't know. It runs the VFO band scan, stops on the first carrier it hears, then tries the standard CTCSS tones and
+DCS codes one by one. The screen stays on the decoded result:
+
+| Row | What it shows |
+|---|---|
+| 1 Search | Start, how far through the tone list the search is, or Found |
+| 2 Frequency | The carrier the scan stopped on |
+| 3 Sub-audio | The decoded CTCSS tone or DCS code |
+| 4 Save channel | Writes the result into the first free channel |
+
+**1** starts and stops. **4** saves: the new channel is named `FOUND`, uses the decoded tone for both transmit and
+receive, and can be renamed in Channels. **Back** leaves; the scan stops and the RX tone you had before is put back.
+
+A signal with no sub-audio takes about a minute, because every candidate needs a moment for the detector to settle.
+When none matches, the search goes back to looking for another carrier. Starting a transmission or opening a hotspot
+ends it.
+
+[How it works](../spec/radio-features.md)

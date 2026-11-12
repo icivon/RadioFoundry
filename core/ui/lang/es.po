@@ -644,7 +644,7 @@ msgstr "Enviar posición ya"
 msgid "Automatic beacons"
 msgstr "Balizas automáticas"
 
-#: core/ui/ui_aprs.c
+#: core/ui/ui_aprs.c core/ui/ui_menus.c
 msgid "Frequency"
 msgstr "Frecuencia"
 
@@ -2569,6 +2569,10 @@ msgid "Zones/Chs Received"
 msgstr "Zonas/Can recibidos"
 
 #: core/ui/ui_menus.c
+msgid "Tone find"
+msgstr "Buscar tono"
+
+#: core/ui/ui_menus.c
 msgid "Dual watch"
 msgstr "Doble escucha"
 
@@ -3191,6 +3195,42 @@ msgstr "Escaneo detenido aquí"
 #: core/ui/ui_menus.c
 msgid "Edit scan lists in qdmr"
 msgstr "Edita listas de escaneo en qdmr"
+
+#: core/ui/ui_menus.c
+msgid "Search"
+msgstr "Buscar"
+
+#: core/ui/ui_menus.c
+msgid "Sub-audio"
+msgstr "Subtono"
+
+#: core/ui/ui_menus.c
+msgid "Save channel"
+msgstr "Guardar canal"
+
+#: core/ui/ui_menus.c
+msgid "Start"
+msgstr "Iniciar"
+
+#: core/ui/ui_menus.c
+msgid "Found"
+msgstr "Encontrado"
+
+#: core/ui/ui_menus.c
+msgid "Not while transmitting"
+msgstr "No mientras transmite"
+
+#: core/ui/ui_menus.c
+msgid "Nothing found yet"
+msgstr "Aún no hay resultados"
+
+#: core/ui/ui_menus.c
+msgid "Channel saved"
+msgstr "Canal guardado"
+
+#: core/ui/ui_menus.c
+msgid "Save failed"
+msgstr "No se pudo guardar"
 
 #: core/ui/ui_menus.c
 msgid "In use"

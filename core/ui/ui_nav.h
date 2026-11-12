@@ -39,6 +39,7 @@ typedef enum {
 	SCR_APRS_TO,			// destination callsign editor for APRS transmission
 	SCR_APRS_STATION,		// a heard station's actions
 	SCR_MESSAGE_TEXT,		// message body editor
+	SCR_TONEFIND,			// find an unknown FM carrier and its sub-audio tone (CONFIG_TONE_FIND)
 	SCR_COUNT
 } ui_scr_t;
 
@@ -103,6 +104,10 @@ extern ui_target_t ui_target;		// the target of SCR_ACTIONS / SCR_COMPOSE
 const radio_view_t *ui_view(void);
 ui_frame_t *ui_frame(void);
 uint8_t ui_depth(void);
+#if CONFIG_TONE_FIND
+// Every UI pass: drive the unknown-frequency / unknown-tone search (ui_menus.c)
+void ui_tonefind_tick(uint32_t now_ms);
+#endif
 void ui_push(uint8_t scr, uint16_t arg);
 void ui_pop(void);
 void ui_go_home(void);

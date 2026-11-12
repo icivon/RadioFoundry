@@ -459,6 +459,16 @@ run-subaudio: subaudioTest subaudioDspTest
 	./subaudioDspTest
 .PHONY: run-subaudio
 
+# The unknown-frequency / unknown-tone finder's state machine (core/ui/tonefind.c)
+TESTS   += tonefindTest
+tonefindTest: tonefindTest.c $(CORE)/ui/tonefind.c $(CORE)/ui/tonefind.h $(CORE)/radio/tones.c $(CORE)/radio/tones.h
+	$(CC) $(CFLAGS) -I$(ROOT)/hal -o $@ tonefindTest.c $(CORE)/ui/tonefind.c $(CORE)/radio/tones.c
+
+run: run-tonefind
+run-tonefind: tonefindTest
+	./tonefindTest
+.PHONY: run-tonefind
+
 # The language tables, as the firmware build makes them (tools/i18n.py)
 LANG_H := out/gen/lang_tables.h
 ifneq ($(filter i18n-failed,$(shell python3 $(ROOT)/tools/i18n.py --gen $(LANG_H) || echo i18n-failed)),)

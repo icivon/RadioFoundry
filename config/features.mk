@@ -171,6 +171,8 @@ CONFIG_UI_COLOR ?= y
 CONFIG_UI_SETTINGS ?= y
 # channel / zone scan, VFO band scan, dual watch, nuisance delete (docs/spec/radio-features.md)
 CONFIG_SCAN ?= y
+# find an unknown FM carrier and its unknown CTCSS/DCS tone, then save it as a channel (docs/spec/radio-features.md)
+CONFIG_TONE_FIND ?= $(CONFIG_SCAN)
 # the dual watch screens: two channels on Home, which one PTT uses and which one a call came in on; the radio core's
 # dual watch across zones and with the VFO, PTT on the selected channel (needs SCAN; docs/ux/dual-watch.md)
 CONFIG_DUAL_WATCH ?= $(CONFIG_SCAN)
@@ -320,6 +322,11 @@ endif
 ifneq ($(call feature_on,DUAL_WATCH),)
   ifeq ($(call feature_on,SCAN),)
     $(error CONFIG_DUAL_WATCH=y needs CONFIG_SCAN=y)
+  endif
+endif
+ifneq ($(call feature_on,TONE_FIND),)
+  ifeq ($(and $(call feature_on,SCAN),$(call feature_on,SUBTONE)),)
+    $(error CONFIG_TONE_FIND=y needs CONFIG_SCAN=y and CONFIG_SUBTONE=y)
   endif
 endif
 ifneq ($(call feature_on,FONT_BIG),)

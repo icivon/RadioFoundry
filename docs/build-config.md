@@ -165,6 +165,7 @@ below are for an STM32F4 radio.
 | `CONFIG_CONTACT_EDIT` | = `CHANNEL_EDIT` and `DMR` | the contact editor: a new contact from Find's Create contact or Save as contact in actions (`docs/spec/ui.md` 2.4). Needs `CONFIG_CHANNEL_EDIT` and `CONFIG_DMR`; without it contacts come only from a CPS |
 | `CONFIG_KEY_ASSIGN` | y | key assignment: Settings > Keys and the codeplug's quick-key slots say what the board's programmable keys do (`docs/spec/ui.md` 3.1) |
 | `CONFIG_SCAN` | y | zone, VFO band and dual watch scan (`docs/spec/radio-features.md` 2) |
+| `CONFIG_TONE_FIND` | y (with `SCAN`, `SUBTONE`) | Tools > Tone find: find an unknown FM carrier and its unknown CTCSS/DCS tone, stay on the decoded result and save it as a channel (`docs/spec/radio-features.md` 2.3). Needs `CONFIG_SCAN` and `CONFIG_SUBTONE` |
 | `CONFIG_DUAL_WATCH` | y (with `SCAN`) | the dual watch screens: Home with both channels, the channel picker and the dual watch actions ([dual-watch](ux/dual-watch.md)); in the radio core, channels of other zones and the VFO, and PTT on the selected channel without ending the watch (`docs/spec/radio-features.md` 2.1). Off: dual watch stays reachable only from the debug link (two channels of the current zone) |
 | `CONFIG_BEEP` | y | key, TX permit / deny, call end, time-out warning, battery and scan beeps (`docs/spec/radio-features.md` 4) |
 | `CONFIG_FONT_XL` | n (y on a 240 px color radio) | 16x32 font, for 240 px and wider displays |

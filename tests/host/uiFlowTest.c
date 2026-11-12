@@ -114,6 +114,8 @@ static const flow_t flows[] = {
 	  "ctx 1", "dual=1 sel=B last=B uipos=5", 2, false },
 	{ "11 dual watch: long SK2", "quick 7 ctx 3 5 ok back back", "long:user2", "dual=1 sel=A bpos=5", 1, false },
 	{ "11 dual watch: Tools > Scan, a zone scan instead", "quick 7 ctx 3 5 ok", "ok 6 1", "dual=0 scanning=1", 3, false },
+	// Tools' last row: Up wraps from the first row to the last one (ui_app.c list_move)
+	{ "Tone find: the last tool opens the finder", "", "ok 6 up ok", "screen=tonefind", 4, false },
 	{ "11 dual watch: the last B after power off", "quick 7 ctx 3 5 ok back back reboot", "quick 7", "dual=1 sel=A bpos=5",
 	  2, false },
 	// Settings > Advanced > Hardware (last row): OK steps a choice without storing ("*"), holding OK stores it

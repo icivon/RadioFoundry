@@ -147,6 +147,10 @@ spec = "docs/spec/ui.md"
 switch = "SCAN"
 spec = "docs/spec/radio-features.md"
 
+[feature.tone_find]
+switch = "TONE_FIND"
+spec = "docs/spec/radio-features.md"
+
 [feature.dual_watch]
 switch = "DUAL_WATCH"
 spec = "docs/spec/radio-features.md"

@@ -184,6 +184,9 @@
 #ifndef CONFIG_SCAN
 #define CONFIG_SCAN			1
 #endif
+#ifndef CONFIG_TONE_FIND
+#define CONFIG_TONE_FIND		(CONFIG_SCAN && CONFIG_SUBTONE)
+#endif
 #ifndef CONFIG_DUAL_WATCH
 #define CONFIG_DUAL_WATCH		CONFIG_SCAN
 #endif

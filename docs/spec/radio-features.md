@@ -146,6 +146,32 @@ so (the debug link's `dual.both`).
 `ui_svc_receivers()` is 2 on such a radio, and `ui_svc_dual_rx(pane)` reports each pane's own receiver while the
 second one has its channel: the dual watch screens then show a call on each pane at once.
 
+### 2.3 Tone find (`CONFIG_TONE_FIND`)
+
+Finds an FM carrier whose frequency and sub-audio tone are both unknown, stops on it, shows the decoded result and
+offers one key to store it as a channel. Needs `CONFIG_SCAN` and `CONFIG_SUBTONE`.
+
+The state machine (`core/ui/tonefind.c`) is pure: the UI passes what it observes each pass and performs the action
+returned. It starts the existing VFO band scan (2). When that scan holds on a carrier it stops there, then walks the
+standard [tone list](capabilities.md) one entry at a time: each candidate becomes the VFO's RX tone and the radio
+core's debounced `tone_ok` says whether that tone is on air. A candidate gets `TONEFIND_CANDIDATE_MS` (250 ms) to
+settle, so a full pass over 50 CTCSS tones and both polarities of 104 DCS codes can take about a minute. Trying one
+tone at a time needs no board-specific audio path; every radio that can scan and set an RX tone can do it.
+
+| Result | What happens |
+|---|---|
+| A candidate matches | The phase becomes FOUND. The screen stays on the frequency and shows it, the decoded tone and 100 % progress. The VFO keeps that RX tone so the signal stays audible |
+| No candidate matches | The RX tone goes back to none and the VFO scan resumes on the next carrier |
+| No carrier for `TONEFIND_SEEK_MS` (60 s), PTT or a hotspot | The scan stops and the search ends |
+| The user leaves the screen or presses Stop | The scan stops and the RX tone in effect before the search is restored |
+
+Save writes the lowest free codeplug channel through `ui_svc_write_channel()`: the found frequency as both RX and TX,
+the current mode and bandwidth, the decoded tone as both RX and TX, the default power and the name `FOUND`. The channel
+editor can rename it. With no free channel or no codeplug storage the UI says the save failed.
+
+The host test `tests/host/tonefindTest.c` covers a match, an exhausted candidate list, the seek timeout, a transmission
+ending the search and leaving the screen.
+
 ## 3. FM transmit extras
 
 ### 3.1 Busy channel lockout and TX inhibit

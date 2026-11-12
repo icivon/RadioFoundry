@@ -16,6 +16,8 @@
 #include "config.h"
 #include "hal_time.h"
 #include "radio/tones.h"
+#include "radio/scan.h"
+#include "ui/tonefind.h"
 #include "radio/mic_gain.h"
 #include "radio/ref_trim.h"
 #include "radio/radio_am.h"
@@ -5043,7 +5045,8 @@ void ui_crash_tick(uint32_t now_ms)
 // Every tool keeps its number on every radio and build, so a key path (OK 6 7: Diagnostics; tests/hil/test_ui.py and the
 // user guide) is the same everywhere. The one a radio may not have (Battery) is last, so no radio has a gap; a build
 // without diagnostics skips 7
-enum { T_SCAN, T_POSITION, T_HOTSPOT, T_USB_NET, T_SFR, T_ROAM, T_DIAG, T_APRS, T_BATTERY, T_ZONE_OFFER, T_COUNT };
+enum { T_SCAN, T_POSITION, T_HOTSPOT, T_USB_NET, T_SFR, T_ROAM, T_DIAG, T_APRS, T_BATTERY, T_ZONE_OFFER,
+       T_TONEFIND, T_COUNT };
 
 // A tool this build or radio doesn't have is left out of the list (Battery, Supply on a radio that measures its DC
 // input instead, is left out where the radio measures neither)
@@ -5054,7 +5057,7 @@ static bool tool_shown(uint16_t i)
 		return offer_waiting();	// 0 on the keypad: only while another radio's zone waits
 #endif
 	return (i != T_DIAG || CONFIG_DIAG) && (i != T_BATTERY || board_volts() != BOARD_VOLTS_NONE) &&
-	       i != T_ZONE_OFFER;
+	       (i != T_TONEFIND || CONFIG_TONE_FIND) && i != T_ZONE_OFFER;
 }
 
 // The hint names the last number ("1-9 open"): the highest tool this radio has. Built in the language in use on each
@@ -5093,7 +5096,7 @@ static void tools_item(uint16_t row, ui_item_t *it)
 {
 	static const char *const names[] = { TRN("Scan"), TRN("Position"), TRN("Hotspot"), TRN("USB network"),
 					     TRN("Single-freq repeater"), TRN("Roaming"), TRN("Diagnostics"), "APRS",
-					     TRN("Battery"), TRN("Zones/Chs Received") };
+					     TRN("Battery"), TRN("Zones/Chs Received"), TRN("Tone find") };
 	uint16_t i = tools_row(row);
 	if (i >= T_COUNT)
 		return;
@@ -5192,6 +5195,9 @@ static void tools_select(uint16_t row, bool hold)
 	case T_ROAM: ui_push(SCR_ROAM, 0); break;
 	case T_APRS: ui_push(SCR_APRS, 0); break;
 	case T_ZONE_OFFER: ui_push(SCR_OFFER, 0); break;
+#if CONFIG_TONE_FIND
+	case T_TONEFIND: ui_push(SCR_TONEFIND, 0); break;
+#endif
 	default: break;
 	}
 }
@@ -6257,6 +6263,141 @@ static const ui_scr_def_t scan_screen = {
 	.count = scan_count, .item = scan_item, .select = scan_select,
 };
 
+// ======================= Tone find: an unknown FM carrier and its unknown sub-audio =======================
+#if CONFIG_TONE_FIND
+
+static tonefind_t tonefind;
+
+// Leaving without pressing Stop must not leave a scan running or a tried tone set.
+static void tonefind_leave(void)
+{
+	(void)tonefind_cancel(&tonefind);
+	radio_req_scan(RSCAN_STOP);
+	radio_req_tone(RADIO_TONE_RX, tonefind.saved);
+}
+
+void ui_tonefind_tick(uint32_t now_ms)
+{
+	if (tonefind.phase == TONEFIND_IDLE) {
+		return;
+	}
+	if (ui_frame()->scr != SCR_TONEFIND) {
+		tonefind_leave();
+		return;
+	}
+	const radio_view_t *v = ui_view();
+	bool held = v->scan == SCAN_VFO && v->scan_phase == SCAN_PH_HOLD;
+	tonefind_action_t a = tonefind_poll(&tonefind, held, v->ch.rx_hz, v->tone_ok,
+					   v->state == RS_TX || v->hotspot, now_ms);
+	switch (a.act) {
+	case TONEFIND_A_SCAN_ON:
+		radio_req_tone(RADIO_TONE_RX, (subtone_t){ TONE_NONE, 0 });
+		radio_req_scan_vfo(0, 0);	// the VFO's band
+		break;
+	case TONEFIND_A_SCAN_OFF:
+		radio_req_scan(RSCAN_STOP);
+		break;
+	case TONEFIND_A_TONE:
+		radio_req_tone(RADIO_TONE_RX, a.tone);
+		break;
+	case TONEFIND_A_RESTORE:
+		radio_req_scan(RSCAN_STOP);
+		radio_req_tone(RADIO_TONE_RX, tonefind.saved);
+		break;
+	default:
+		break;
+	}
+}
+
+enum { TF_START, TF_FREQ, TF_TONE, TF_SAVE, TF_COUNT };
+
+static uint16_t tonefind_count(void) { return TF_COUNT; }
+
+static void tonefind_item(uint16_t i, ui_item_t *it)
+{
+	static const char *const names[] = { TRN("Search"), TRN("Frequency"), TRN("Sub-audio"),
+					    TRN("Save channel") };
+	str_copy(it->label, sizeof it->label, tr(names[i]));
+	item_num(it, (uint16_t)(i + 1u));
+	sbuf_t b;
+	sb_init(&b, it->value, sizeof it->value);
+	switch (i) {
+	case TF_START:
+		if (tonefind.phase == TONEFIND_IDLE)
+			sb_str(&b, TR("Start"));
+		else if (tonefind.phase == TONEFIND_FOUND)
+			sb_str(&b, TR("Found"));
+		else {
+			sb_u32(&b, tonefind_progress(&tonefind), 1);
+			sb_chr(&b, '%');
+		}
+		break;
+	case TF_FREQ:
+		if (tonefind.hz != 0)
+			sb_freq(&b, tonefind.hz);
+		break;
+	case TF_TONE:
+		if (tonefind.phase == TONEFIND_FOUND)
+			sb_tone(&b, &tonefind.found);
+		break;
+	default:
+		if (tonefind.phase != TONEFIND_FOUND)
+			it->flags |= UI_ITEM_DIM;
+		break;
+	}
+}
+
+static void tonefind_select(uint16_t i, bool hold)
+{
+	(void)hold;
+	const radio_view_t *v = ui_view();
+	if (i == TF_START) {
+		if (tonefind.phase != TONEFIND_IDLE) {
+			tonefind_leave();
+			return;
+		}
+		if (!tonefind_start(&tonefind, v->ch.rx_tone, v->state == RS_TX || v->hotspot, ui_st.now_ms)) {
+			ui_toast(TR("Not while transmitting"));
+			return;
+		}
+		radio_req_tone(RADIO_TONE_RX, (subtone_t){ TONE_NONE, 0 });
+		radio_req_scan_vfo(0, 0);	// the VFO's band
+		return;
+	}
+	if (i != TF_SAVE) {
+		return;
+	}
+	if (tonefind.phase != TONEFIND_FOUND) {
+		ui_toast(TR("Nothing found yet"));
+		return;
+	}
+	uint16_t num = codeplug_free_channel();
+	if (num == 0) {
+		ui_toast(TR("No free channel"));
+		return;
+	}
+	channel_t ch;
+	memset(&ch, 0, sizeof ch);
+	str_copy(ch.name, sizeof ch.name, "FOUND");
+	ch.rx_hz = ch.tx_hz = tonefind.hz;
+	ch.mode = v->ch.mode;
+	ch.bw = v->ch.bw;
+	ch.rx_tone = ch.tx_tone = tonefind.found;
+	ch.power = CODEPLUG_POWER_DEFAULT;
+	if (ui_svc_write_channel(num, &ch))
+		ui_toast(TR("Channel saved"));
+	else
+		ui_toast(TR("Save failed"));
+}
+
+static const ui_scr_def_t tonefind_screen = {
+	.name = "tonefind", .flags = SF_LIST | SF_NUMBERED | SF_FIELD, .prefix = TRN("Tone find"),
+	.hint = TRN("1-4 pick  Back"), .count = tonefind_count, .item = tonefind_item,
+	.select = tonefind_select,
+};
+
+#endif	// CONFIG_TONE_FIND
+
 // ======================= Screens with their own drawing =======================
 
 static const ui_scr_def_t home_screen = {
@@ -6359,6 +6500,9 @@ const ui_scr_def_t *const ui_scr[SCR_COUNT] = {
 	[SCR_PICKER] = &picker_screen, [SCR_INFO] = &info_screen, [SCR_CONFIRM] = &confirm_screen,
 	[SCR_DIAG] = &diag_screen, [SCR_EMERGENCY] = &emergency_screen, [SCR_SCAN] = &scan_screen,
 	[SCR_ROAM] = &roam_screen, [SCR_APRS] = &ui_aprs_screen, [SCR_APRS_HEARD] = &ui_aprs_heard_screen,
+#if CONFIG_TONE_FIND
+	[SCR_TONEFIND] = &tonefind_screen,
+#endif
 	[SCR_APRS_STATION] = &ui_aprs_station_screen,
 	[SCR_ABOUT] = &about_screen,
 #if CONFIG_POSITION
