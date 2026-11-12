@@ -990,7 +990,7 @@ msgstr "状态"
 msgid "Sky"
 msgstr "天空"
 
-#: core/ui/ui_gps.c
+#: core/ui/ui_gps.c core/ui/ui_menus.c
 msgid "Signal"
 msgstr "信号"
 
@@ -3233,6 +3233,22 @@ msgstr "信道已保存"
 #: core/ui/ui_menus.c
 msgid "Save failed"
 msgstr "保存失败"
+
+#: core/ui/ui_menus.c
+msgid "Peak"
+msgstr "最大"
+
+#: core/ui/ui_menus.c
+msgid "Delta"
+msgstr "差值"
+
+#: core/ui/ui_menus.c
+msgid "Level"
+msgstr "等级"
+
+#: core/ui/ui_menus.c
+msgid "Up/Down step  Back"
+msgstr "上下步进 返回"
 
 #: core/ui/ui_menus.c
 msgid "In use"

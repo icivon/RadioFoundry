@@ -2283,6 +2283,7 @@ bool ui_app_tick(const radio_view_t *v, uint32_t now_ms)
 #if CONFIG_TONE_FIND
 	ui_tonefind_tick(now_ms);
 #endif
+	ui_rssi_tick(now_ms);
 #if CONFIG_ZONE_EDIT
 	ui_svc_zone_poll();
 #endif

@@ -5046,7 +5046,7 @@ void ui_crash_tick(uint32_t now_ms)
 // user guide) is the same everywhere. The one a radio may not have (Battery) is last, so no radio has a gap; a build
 // without diagnostics skips 7
 enum { T_SCAN, T_POSITION, T_HOTSPOT, T_USB_NET, T_SFR, T_ROAM, T_DIAG, T_APRS, T_BATTERY, T_ZONE_OFFER,
-       T_TONEFIND, T_COUNT };
+       T_TONEFIND, T_RSSI, T_COUNT };
 
 // A tool this build or radio doesn't have is left out of the list (Battery, Supply on a radio that measures its DC
 // input instead, is left out where the radio measures neither)
@@ -5057,7 +5057,8 @@ static bool tool_shown(uint16_t i)
 		return offer_waiting();	// 0 on the keypad: only while another radio's zone waits
 #endif
 	return (i != T_DIAG || CONFIG_DIAG) && (i != T_BATTERY || board_volts() != BOARD_VOLTS_NONE) &&
-	       (i != T_TONEFIND || CONFIG_TONE_FIND) && i != T_ZONE_OFFER;
+	       (i != T_TONEFIND || CONFIG_TONE_FIND) && (i != T_RSSI || CONFIG_VFO_FM || CONFIG_VFO_DMR) &&
+	       i != T_ZONE_OFFER;
 }
 
 // The hint names the last number ("1-9 open"): the highest tool this radio has. Built in the language in use on each
@@ -5096,7 +5097,7 @@ static void tools_item(uint16_t row, ui_item_t *it)
 {
 	static const char *const names[] = { TRN("Scan"), TRN("Position"), TRN("Hotspot"), TRN("USB network"),
 					     TRN("Single-freq repeater"), TRN("Roaming"), TRN("Diagnostics"), "APRS",
-					     TRN("Battery"), TRN("Zones/Chs Received"), TRN("Tone find") };
+					     TRN("Battery"), TRN("Zones/Chs Received"), TRN("Tone find"), TRN("Signal") };
 	uint16_t i = tools_row(row);
 	if (i >= T_COUNT)
 		return;
@@ -5198,6 +5199,7 @@ static void tools_select(uint16_t row, bool hold)
 #if CONFIG_TONE_FIND
 	case T_TONEFIND: ui_push(SCR_TONEFIND, 0); break;
 #endif
+	case T_RSSI: ui_push(SCR_RSSI, 0); break;
 	default: break;
 	}
 }
@@ -6398,6 +6400,114 @@ static const ui_scr_def_t tonefind_screen = {
 
 #endif	// CONFIG_TONE_FIND
 
+// ======================= Signal meter: the current frequency's strength in dBm =======================
+// A temporary VFO: entering keeps the receiver on the frequency it had and Up / Down step it by the VFO's step.
+// Leaving restores what was in effect before (ui_rssi_tick): the VFO's own frequency, or the channel it left.
+
+static bool rssi_active;		// in the screen, with a restore pending
+static bool rssi_was_vfo;		// whether it came from a channel (else the VFO)
+static uint32_t rssi_saved_hz;		// the frequency in effect before (VFO: put it back)
+static int16_t rssi_peak, rssi_last;	// 0: no value yet (the receiver's RSSI is negative)
+static int8_t rssi_trend;		// the last change: +1 up, -1 down, 0 flat
+
+static void rssi_enter(void)
+{
+	const radio_view_t *v = ui_view();
+	rssi_was_vfo = v->vfo;
+	rssi_saved_hz = v->ch.rx_hz;
+	rssi_peak = v->rssi_dbm;
+	rssi_last = v->rssi_dbm;
+	rssi_trend = 0;
+	radio_req_vfo_set(v->ch.rx_hz);	// the receiver stays on this frequency, now in the VFO
+	rssi_active = true;
+}
+
+void ui_rssi_tick(uint32_t now_ms)
+{
+	(void)now_ms;
+	if (!rssi_active) {
+		return;
+	}
+	if (ui_frame()->scr != SCR_RSSI) {
+		if (rssi_was_vfo)
+			radio_req_vfo_set(rssi_saved_hz);
+		else
+			radio_req_vfo(false);	// back to the channel it left (zone_pos was kept)
+		rssi_active = false;
+		return;
+	}
+	const radio_view_t *v = ui_view();
+	if (v->rssi_dbm != 0 && (rssi_peak == 0 || v->rssi_dbm > rssi_peak))
+		rssi_peak = v->rssi_dbm;
+	if (v->rssi_dbm != 0 && rssi_last != 0)
+		rssi_trend = v->rssi_dbm > rssi_last ? 1 : v->rssi_dbm < rssi_last ? -1 : 0;
+	rssi_last = v->rssi_dbm;
+}
+
+// Up / Down (or the encoder) step the VFO; every other key falls through to the list (Back leaves).
+static bool rssi_key(const input_event_t *ev)
+{
+	int8_t dir = 0;
+	switch (ev->action) {
+	case ACT_NAV_UP: dir = 1; break;
+	case ACT_NAV_DOWN: dir = -1; break;
+	case ACT_ENC_STEP: dir = ev->value > 0 ? 1 : ev->value < 0 ? -1 : 0; break;
+	default: return false;
+	}
+	if (dir == 0)
+		return false;
+	if (ev->action != ACT_ENC_STEP && ev->gesture != GESTURE_PRESS && ev->gesture != GESTURE_REPEAT &&
+			ev->gesture != GESTURE_LONG)
+		return false;
+	radio_req_vfo_step(dir);
+	return true;
+}
+
+enum { R_FREQ, R_SIGNAL, R_PEAK, R_DELTA, R_LEVEL, R_COUNT };
+
+static uint16_t rssi_count(void) { return R_COUNT; }
+
+static void rssi_item(uint16_t i, ui_item_t *it)
+{
+	const radio_view_t *v = ui_view();
+	static const char *const names[] = { TRN("Frequency"), TRN("Signal"), TRN("Peak"), TRN("Delta"),
+					    TRN("Level") };
+	str_copy(it->label, sizeof it->label, tr(names[i]));
+	sbuf_t b;
+	sb_init(&b, it->value, sizeof it->value);
+	switch (i) {
+	case R_FREQ:
+		sb_freq(&b, v->ch.rx_hz);
+		break;
+	case R_SIGNAL:
+		sb_i32(&b, v->rssi_dbm);
+		sb_str(&b, " dBm ");
+		sb_chr(&b, rssi_trend > 0 ? '+' : rssi_trend < 0 ? '-' : '=');
+		break;
+	case R_PEAK:
+		sb_i32(&b, rssi_peak);
+		sb_str(&b, " dBm");
+		break;
+	case R_DELTA:
+		sb_i32(&b, v->rssi_dbm - rssi_peak);
+		sb_str(&b, " dB");
+		break;
+	default: {
+		int bars = v->rssi_dbm >= -88 ? 5 : v->rssi_dbm >= -98 ? 4 : v->rssi_dbm >= -108 ? 3 :
+			   v->rssi_dbm >= -118 ? 2 : v->rssi_dbm >= -128 ? 1 : 0;
+		for (int k = 0; k < 5; k++)
+			sb_chr(&b, k < bars ? '#' : '-');
+		break;
+	}
+	}
+}
+
+static const ui_scr_def_t rssi_screen = {
+	.name = "signal", .flags = SF_LIST | SF_FIELD, .prefix = TRN("Signal"),
+	.hint = TRN("Up/Down step  Back"), .count = rssi_count, .item = rssi_item, .key = rssi_key,
+	.enter = rssi_enter,
+};
+
 // ======================= Screens with their own drawing =======================
 
 static const ui_scr_def_t home_screen = {
@@ -6503,6 +6613,7 @@ const ui_scr_def_t *const ui_scr[SCR_COUNT] = {
 #if CONFIG_TONE_FIND
 	[SCR_TONEFIND] = &tonefind_screen,
 #endif
+	[SCR_RSSI] = &rssi_screen,
 	[SCR_APRS_STATION] = &ui_aprs_station_screen,
 	[SCR_ABOUT] = &about_screen,
 #if CONFIG_POSITION

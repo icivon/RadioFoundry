@@ -218,3 +218,25 @@ When none matches, the search goes back to looking for another carrier. Starting
 ends it.
 
 [How it works](../spec/radio-features.md)
+
+## Signal meter
+
+**OK**, **6** (Tools), scroll down to **Signal**, **OK** shows the current frequency's signal strength as a number, not
+just the bars on Home. The screen retunes the receiver to the frequency it was on and keeps it there; it does not
+change the channel or the VFO you were using:
+
+| Row | What it shows |
+|---|---|
+| Frequency | The frequency the receiver is on |
+| Signal | Its strength in dBm, with the last change: + up, - down, = flat |
+| Peak | The strongest dBm seen since the screen opened |
+| Delta | The current strength against the peak (a negative number means weaker) |
+| Level | The strength as 0–5 bars |
+
+**Up** / **Down** (or the knob) step the frequency by the VFO's step, so you can walk a band and watch the strength
+change. The bars and dBm follow the receiver. **Back** leaves; the channel (or the VFO frequency) you had before comes
+back.
+
+The reading is the receiver's RSSI, the same value Home turns into its signal bars. It is a relative strength, not a
+direction: moving the radio and watching the peak is the usual way to locate a transmitter, but the radio has no
+antenna array to report a bearing.

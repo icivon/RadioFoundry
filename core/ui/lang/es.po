@@ -988,7 +988,7 @@ msgstr "Estado"
 msgid "Sky"
 msgstr "Cielo"
 
-#: core/ui/ui_gps.c
+#: core/ui/ui_gps.c core/ui/ui_menus.c
 msgid "Signal"
 msgstr "Señal"
 
@@ -3231,6 +3231,22 @@ msgstr "Canal guardado"
 #: core/ui/ui_menus.c
 msgid "Save failed"
 msgstr "No se pudo guardar"
+
+#: core/ui/ui_menus.c
+msgid "Peak"
+msgstr "Pico"
+
+#: core/ui/ui_menus.c
+msgid "Delta"
+msgstr "Delta"
+
+#: core/ui/ui_menus.c
+msgid "Level"
+msgstr "Nivel"
+
+#: core/ui/ui_menus.c
+msgid "Up/Down step  Back"
+msgstr "Arriba/Abajo paso  Atrás"
 
 #: core/ui/ui_menus.c
 msgid "In use"

@@ -40,6 +40,7 @@ typedef enum {
 	SCR_APRS_STATION,		// a heard station's actions
 	SCR_MESSAGE_TEXT,		// message body editor
 	SCR_TONEFIND,			// find an unknown FM carrier and its sub-audio tone (CONFIG_TONE_FIND)
+	SCR_RSSI,			// the current frequency's signal strength in dBm, with peak and trend (Tools > Signal)
 	SCR_COUNT
 } ui_scr_t;
 
@@ -108,6 +109,7 @@ uint8_t ui_depth(void);
 // Every UI pass: drive the unknown-frequency / unknown-tone search (ui_menus.c)
 void ui_tonefind_tick(uint32_t now_ms);
 #endif
+void ui_rssi_tick(uint32_t now_ms);	// every UI pass: peak/trend and the temporary VFO restore (ui_menus.c)
 void ui_push(uint8_t scr, uint16_t arg);
 void ui_pop(void);
 void ui_go_home(void);
