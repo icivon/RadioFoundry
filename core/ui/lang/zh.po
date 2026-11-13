@@ -3291,7 +3291,7 @@ msgid "Level"
 msgstr "等级"
 
 #: core/ui/ui_menus.c
-msgid "Up/Down step  Back"
+msgid "Digits tune  Up/Down step  Back"
 msgstr "上下步进 返回"
 
 #: core/ui/ui_menus.c

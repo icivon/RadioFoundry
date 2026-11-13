@@ -6670,6 +6670,8 @@ static bool rssi_was_vfo;		// whether it came from a channel (else the VFO)
 static uint32_t rssi_saved_hz;		// the frequency in effect before (VFO: put it back)
 static int16_t rssi_peak, rssi_last;	// 0: no value yet (the receiver's RSSI is negative)
 static int8_t rssi_trend;		// the last change: +1 up, -1 down, 0 flat
+static char rssi_digits[UI_ENTRY_MAX + 1];	// typed frequency digits, positional 100 MHz .. 10 Hz
+static uint8_t rssi_dlen;			// how many of them are entered
 
 static void rssi_enter(void)
 {
@@ -6679,6 +6681,8 @@ static void rssi_enter(void)
 	rssi_peak = v->rssi_dbm;
 	rssi_last = v->rssi_dbm;
 	rssi_trend = 0;
+	rssi_dlen = 0;
+	rssi_digits[0] = '\0';
 	radio_req_vfo_set(v->ch.rx_hz);	// the receiver stays on this frequency, now in the VFO
 	rssi_active = true;
 }
@@ -6705,9 +6709,23 @@ void ui_rssi_tick(uint32_t now_ms)
 	rssi_last = v->rssi_dbm;
 }
 
-// Up / Down (or the encoder) step the VFO; every other key falls through to the list (Back leaves).
+// Digits tune the VFO live (above); Up / Down (or the encoder) step it; every other key falls through to the list
+// (Back leaves).
 static bool rssi_key(const input_event_t *ev)
 {
+	// Typed digits tune the VFO live, like Home's direct frequency entry; Up / Down still step it.
+	if (ev->action >= ACT_DIGIT_0 && ev->action <= ACT_DIGIT_9) {
+		if (ev->gesture != GESTURE_PRESS && ev->gesture != GESTURE_REPEAT &&
+				ev->gesture != GESTURE_LONG)
+			return false;
+		char d = (char)('0' + (ev->action - ACT_DIGIT_0));
+		if (ui_freq_entry_digit(rssi_digits, &rssi_dlen, d)) {
+			uint32_t hz = ui_freq_parse(rssi_digits, rssi_dlen);
+			if (hz != 0)
+				radio_req_vfo_set(hz);
+		}
+		return true;
+	}
 	int8_t dir = 0;
 	switch (ev->action) {
 	case ACT_NAV_UP: dir = 1; break;
@@ -6765,7 +6783,7 @@ static void rssi_item(uint16_t i, ui_item_t *it)
 
 static const ui_scr_def_t rssi_screen = {
 	.name = "signal", .flags = SF_LIST | SF_FIELD, .prefix = TRN("Signal"),
-	.hint = TRN("Up/Down step  Back"), .count = rssi_count, .item = rssi_item, .key = rssi_key,
+	.hint = TRN("Digits tune  Up/Down step  Back"), .count = rssi_count, .item = rssi_item, .key = rssi_key,
 	.enter = rssi_enter,
 };
 
