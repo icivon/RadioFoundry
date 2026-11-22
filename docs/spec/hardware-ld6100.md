@@ -3,7 +3,7 @@
 
 # LD6100 preliminary feasibility research
 
-Status: preliminary research, updated 2026-11-20. This is not a complete hardware specification or a supported-radio
+Status: preliminary research, updated 2026-11-22. This is not a complete hardware specification or a supported-radio
 claim. It records the supplied firmware's identity and the owner's teardown observations. The physical observations
 have not yet been independently checked against schematics, pin measurements, or operation on the radio.
 
@@ -35,6 +35,7 @@ measurements or confirmed functional assignments.
 | DMR SoC/modem | HR_C7000 marking observed | Exact package variant, memory map, clock and board connections |
 | RF transceiver | FD6818 marking observed | Exact variant, bus, wiring, RF paths, board-specific register profile and calibration |
 | Flash packages | `25Q128ESIG`: SPI, 128 Mbit (16 MiB), rated clock 133 MHz; `25Q16ESIG`: SPI, 16 Mbit (2 MiB), rated clock 133 MHz (owner-provided part information; one marking character may be `1` or `I`) | Which device is XIP program flash versus data storage; actual bus clock, chip-select wiring, erase geometry and protected/calibration ranges |
+| Flash backups | Owner reports that both SPI flash chips have been backed up | Record each dump's exact chip, byte length and SHA-256; verify it is a complete raw read and confirm a tested restore path before any write |
 | Other packages | `5802N` (24-pin), `TDA2822G`, and `SLM680G` beside the display flex | Their roles and connections. `5802N` may be an RDA5802N marking; `TDA2822G` may be an audio amplifier; neither assignment is confirmed |
 | Display | Color, landscape; flex marked `ZYE018QQ22-S`, `BCX`, and `2018.06.07`; nearby IC marked `SLM680G` with `2020` below | Resolution, controller identity, bus, pinout, color depth and initialization requirements; whether nearby markings are model/date codes |
 | Controls | Numeric keys and function keys | Key matrix/direct GPIO wiring, key labels and mapping |
@@ -43,7 +44,7 @@ measurements or confirmed functional assignments.
 | GPS | No GPS module populated; a board location is available for a possible later modification | Whether pads, power, UART and antenna path are routed and usable; module compatibility and firmware support |
 | Programming | CH340 USB-serial K-head cable; owner reports holding SK1 + PTT1 + PTT2 while powering on enters software-update mode. The interface/data lines are reported to match the DM-32 | Exact IAP protocol, key timing, baud rate, pinout and loader identity; electrical similarity does not by itself prove protocol compatibility |
 | IAPTool write profile | `Name=Program`, `Addr=0x0300C000`, `Length=0`, `Select=1`, `IsErase=1`, `Device=MCU_HOST`, `Operate=WRITE` (user-provided) | Meaning of `Length=0`, effective erase range, page size, handshake and checksum |
-| Recovery | Owner reports the original firmware can be restored/flashed with the factory process | The project has not verified recovery after an interrupted or invalid application write |
+| Recovery | Owner reports the original firmware can be restored/flashed with the factory process | Whether either chip backup was restored and verified on this radio; the project has not verified recovery after an interrupted or invalid application write |
 | First test image | Boot and debug link only; RF transmit disabled | Debug UART pins/baud, board power behavior and safe RF-off pin state |
 
 ### 1.1 Board identification from teardown photos
@@ -201,10 +202,106 @@ display driver fits. The shared UI/input model should accommodate the keypad, bu
 map. GPS support may be kept as an optional future path in the board design, as requested by the owner; do not report
 GPS as a working capability until a module is installed and its power, UART and antenna path are verified.
 
+### 3.1 Key layout and count: test and adaptation plan
+
+The owner's observations establish that the LD6100 has numeric and function keys, but not their count, labels,
+electrical arrangement or exact locations. A different physical layout does not by itself require UI/core changes:
+`hal_input_t.scan()` reports board-specific physical key bits, and `board.keymap` maps those bits to logical actions.
+The existing input engine handles debounce, short/long presses, repeats and raw PTT edges; the UI acts on logical
+actions, not key coordinates. See [Adding a Radio](../dev/adding-a-radio.md) "The key map" and [UI](ui.md) 3.
+
+| Test stage | Method | Pass condition / issue caught |
+|---|---|---|
+| Inventory and scan map | Photograph the keypad and board; list every printed key, physical location, matrix row/column or direct GPIO, and intended raw bit. In a diagnostic build, press one key at a time and inspect `input.raw_keys` (debug link); also check that release clears the bit | Each physical key yields exactly its documented raw bit, no neighboring key changes, and no stuck bits. Record polarity, repeated scan stability and any shared-line behavior |
+| Matrix/electrical behavior | Use the shared `keymatrix` driver when the circuit is a supported matrix; exercise every key plus realistic simultaneous presses and the update-entry chord. Check row/column intersections for ghosting, shorts, or keys that disappear in combinations | All required individual keys are detected; any matrix rollover/ghosting limitation is known. Do not infer the matrix from keypad geometry; confirm it electrically |
+| Logical mapping and gestures | Test the exact board `keymap`: short press, long press, repeat for navigation, and down/up edges for PTT/monitor. Exercise digits, side-key assignments and any dedicated keys | Physical labels produce the intended logical actions; PTT releases cleanly; unavailable hardware keys are not advertised or assignable |
+| Host input tests | Reuse `keymatrixTest`, `inputTest` and `keyassignTest`. Add a board key-map test only for LD6100-specific mapping invariants or special scan translation; keep it host-runnable | Matrix decoding, debounce/gesture semantics and board key assignment invariants pass without radio hardware |
+| UI flows with LD6100 map | Add the verified LD6100 logical map to the UI simulator, then run `uiFlowTest` task flows and screen crawl for its geometry/map pair. Compare to the existing `SIM_MAP_F` few-key fallback if essential actions are absent | Required user tasks remain reachable within expected key presses; no screen depends on a missing QUICK, CONTEXT, digit or directional key |
+| On-radio/HIL | With RF transmit inhibited, use the physical keys and debug-link `input.raw_keys` plus visible UI behavior to verify each mapping, debounce, long press and release. Exercise the update-entry combination separately. Review the radio drawing and key labels in the installer/site | The real scanner agrees with the host model, no PTT action transmits, and the drawing/labels identify the correct physical controls |
+
+Adaptation should stay in the narrowest layer:
+
+1. Implement or reuse the board input scanner for the measured electrical wiring: a matrix, direct GPIO keys, or a mixture.
+   The project's matrix decoder and examples such as `boards/dm32/input_dm32.c` and
+   `boards/dm1801pro/input_dm1801pro.c` can guide the hardware-specific scan. Keep scan bits stable and independent of
+   the physical positions printed on the case.
+2. In `boards/ld6100/board.c`, map each present key to the shared `input_action_t` actions. Preserve dedicated PTT as
+   raw down/up edges. Use the existing short/long actions and key assignment support for available side keys instead
+   of adding model-specific behavior to `core/ui`.
+3. If the radio has fewer navigation keys, use the project's few-key fallback: Up/Down, Select, Back and PTT remain
+   sufficient for the base UI, while optional actions use documented fallbacks. Do not expose assignment slots for
+   keys the board does not have. If digits or a key function are absent, verify the affected tasks in flows and add a
+   shared generic alternative only if an actual task becomes unreachable.
+4. If key coordinates or labels differ, update the LD6100 SVG and tags for visual help and web-flasher key prompts; this
+   is separate from changing UI behavior. Run `tools/svg_keys.py tag ld6100` and `tools/svg_keys.py check ld6100` when
+   the board artwork and registry entry exist.
+
+The exact LD6100 layout and key map remain unverified. Avoid chord-based shortcuts as a workaround for missing keys
+unless a real usability requirement justifies them: they add ambiguity to PTT, key-lock, and update-entry behavior.
+
+### 3.2 Display identification and bring-up plan
+
+The reported `ZYE018QQ22-S` flex marking, landscape orientation, and nearby `SLM680G` marking do not identify the
+display controller or its bus. The `SLM680G` package could be part of the panel or its power circuitry; do not assume
+it is the LCD controller without a datasheet or trace evidence. Identify the controller and electrical interface
+before choosing a driver or sending initialization commands.
+
+| Step | Evidence / test | Decision |
+|---|---|---|
+| Identify panel and controller | Photograph both sides of the panel/FPC and all nearby IC top markings. Search the exact markings in public panel/controller datasheets or manufacturer documentation. Record active pixel dimensions, supply and logic voltage, and whether the controller is integrated in the glass/FPC | A verified controller and panel datasheet can select a driver family and permitted interface; a flex model string alone is not enough |
+| Trace the interface | With the radio powered off, use continuity measurements to map FPC pins to SoC/power components and identify reset, chip select, command/data, clock/write strobe, data lines, read strobe, and backlight. Check for a serial bus versus 8-bit/16-bit 8080, RGB, or another interface. Use high-impedance probes only for live signals and avoid shorting adjacent FPC pins | Establish pinout, active levels, bus width, read capability, timing and voltage levels before board code is written |
+| Optional ID read | If the confirmed controller and wiring support reads, use its documented ID register after the documented reset sequence and compare the result with the datasheet. Some panels are write-only or return unreliable IDs; a failed read is inconclusive | Accept ID as corroboration, not as the only identification evidence. The project's existing panel-detection path reads DCS IDs where supported and can report an unknown controller when the result is unusable |
+| Passive bus check | A high-impedance logic analyzer on the known bus can confirm whether traffic is serial or parallel and measure signal timing during normal display activity. Do not short pins or inject commands. Use public datasheets to develop the project's own initialization; do not copy undocumented vendor command tables or firmware code | Verify the proposed interface electrically and make sure the SoC pins and bus timing can support it |
+| Minimal display test | In an isolated bring-up build, initialize from the public datasheet and draw solid black/white/red/green/blue screens, then corner markers, a grid and a short text line. Check orientation, RGB/BGR order, address offsets, clipping, reset behavior and color depth | The image is stable, correctly oriented and colored across full-screen and partial-row updates; reset and backlight work independently |
+| UI integration | Implement board bus glue and `hal_display_t` (`width`, `height`, `bpp`, insets, `init`, `flush`/`flush_indexed`, backlight) while reusing a matching generic driver where verified. Add the measured display geometry to the UI simulator/gallery and review all screens at that class | The frame buffer fits the board RAM; UI text and controls fit the visible area and bezel safe area |
+
+The repository currently has generic `ST7735`/`HX8353`-class drivers for 8080-style and serial buses, and an `ST7789`
+driver for an 8-bit 8080 bus. These are candidates only: matching landscape orientation or pixel dimensions is not
+proof that the controller, bus, init sequence, offsets, color order or inversion match. If LD6100 uses a different
+controller, add a clean-room driver from its public datasheet under `drivers/display/` and keep pin/bus glue in
+`boards/ld6100/`.
+
+The display layer tests are `st7735Test` and `st7789Test` in `tests/host/`; they verify command sequences and pixel
+transfer behavior but cannot validate LD6100 wiring. The radio-specific bring-up must check the actual bus on hardware.
+For a 16-color panel the project can use a 4-bpp indexed frame buffer (`GFX_INDEXED=1`); `GFX_FB_BYTES` and
+`GFX_MAX_ROWS` in `board.mk` must match the measured geometry and fit available RAM. A new UI display class also needs
+a gallery entry and a UI key-map pair in the host flows ([Adding a Radio](../dev/adding-a-radio.md) "The display",
+[Testing](../dev/testing.md) "The UI simulator and the gallery").
+
 These are conditional reuse options, not confirmed LD6100 hardware support. Similar firmware size or a version string
 is not evidence of a shared platform.
 
-## 4. Evidence needed before implementation
+## 4. Development readiness and remaining evidence
+
+The reported HR_C7000 makes `platform/hrc7000` the expected starting platform, and the repository already defines its
+C-SKY toolchain as `csky-elf-gcc` ([Building](../dev/building.md)). Board code can begin now as a compile-only skeleton
+and host-testable modules; a successful link is not evidence that the image is safe to flash or will boot on the LD6100.
+
+Before attempting the first on-radio boot, close the following gates:
+
+1. **Backups and recovery:** keep the vendor image and both full SPI dumps offline and separate. Record the chip
+   marking, byte length, and SHA-256 for each dump. Confirm that the backups are complete and that the factory tool can
+   restore them. A backup is not proven restorable until the tool accepts it and the radio returns to stock operation.
+2. **Boot and memory map:** confirm which chip is the executable flash, the actual program/data boundaries, erase
+   geometry, application base, first-stage/loader ownership, codec location, and calibration regions. The reported
+   factory application address `0x0300C000` is useful evidence but does not define the complete map or a safe install
+   image. Do not use the LD6100 backups as write inputs until their format and target chip are established.
+3. **Power-on safe state and RF inhibit:** map the reset/power-latch behavior and the FD6818/PA control pins. Implement
+   `board_rf_safe()` so it leaves the transmitter disabled before normal initialization and in fault/reset paths. The
+   first test image must have RF transmit disabled; if that state cannot be guaranteed from the measured wiring, do
+   not flash or power the image on the radio.
+4. **Debug and minimum peripherals:** identify the debug UART pins, baud and levels, plus enough clock/SRAM details to
+   bring up the SoC and get a reliable log. Then identify the display and keypad wiring for the first interactive test.
+   The detailed display and key plans are in sections 3.1 and 3.2.
+5. **Build and validation:** install/check `csky-elf-gcc`, create `boards/ld6100/` with its board descriptor, linker
+   memory map and build options, then compile the smallest boot/debug image. Add host tests for any new board-independent
+   logic and run the board build and its required switch-off configurations before considering a radio test.
+
+RF receive/transmit behavior, calibration writing, codec hosting, CPS and Web IAP are later milestones. They are not
+required to prove that the platform starts and the debug link works, and should not be enabled merely to make the first
+image feature-complete.
+
+## 4.1 Evidence needed before implementation
 
 | Question | Minimum useful evidence |
 |---|---|
@@ -212,8 +309,9 @@ is not evidence of a shared platform.
 | MCU / SoC and DMR modem | Record a clear HR_C7000 package marking; identify the exact variant, clocks and memory map from public documentation and non-destructive measurements |
 | RF chain | Confirm the FD6818 variant; identify synthesizer, IF and PA parts; establish exact bands, power and receive/transmit paths from public documents or measurements |
 | Display and controls | Identify the `SLM680G` function and panel/controller; establish dimensions, bus and pinout; map numeric/function keys, LEDs, power switch and battery sensing |
-| Memory and calibration | Confirm both SPI flash part markings and capacities, identify program/data roles, then establish memory protection, actual bus clock, erase geometry, calibration regions and non-destructive backup coverage |
-| Boot and recovery | Confirm the SK1 + PTT1 + PTT2 update entry, K-head loader protocol with a read-only probe, DM-32-compatible interface/pinout and baud; establish full backup coverage, test restore with the original updater, and establish image format, application load address, erase range and recovery route |
+| Memory and calibration | Confirm both SPI flash part markings and capacities, identify program/data roles, record lengths/hashes for the reported full-chip backups, then establish memory protection, actual bus clock, erase geometry and calibration regions |
+| Boot and recovery | Confirm the SK1 + PTT1 + PTT2 update entry, K-head loader protocol with a read-only probe, DM-32-compatible interface/pinout and baud; validate factory restore from the backups and establish image format, application load address, erase range and recovery route |
+| Safe first boot | Map reset/power-latch and FD6818/PA control wiring, then prove `board_rf_safe()` can keep RF transmit disabled before initialization and through fault/reset paths |
 | GPS option | Check whether the unpopulated module location has connected power, UART, antenna path and suitable pads; do not enable GPS based on the footprint alone |
 | Audio and codec | Audio routing and the project's supported local codec-hosting path, established without committing or sharing codec data |
 | Operating behavior | Owner-authorized measurements on the radio; safe receive tests first and transmit tests only on an appropriate bench setup |
@@ -228,8 +326,8 @@ a verified recovery route and make complete, non-destructive backups of relevant
    filing. Revisit the platform choice only if new evidence contradicts the teardown observation.
 2. Identify the SoC, modem, RF parts, memories, display, and buses from markings, public datasheets, and measurements.
    Record unknowns explicitly; do not infer pins or register behavior from vendor code.
-3. Before any write, confirm the K-head loader protocol and SK1 + PTT1 + PTT2 entry steps, make a complete backup where possible, and
-   verify that the original updater can restore the stock image. Do not treat the reported but untested recovery route
+3. Before any write, record and verify the full-chip backups, confirm the K-head loader protocol and SK1 + PTT1 + PTT2
+   entry steps, and test that the original updater can restore stock operation. Do not treat an untested recovery route
    as proven.
 4. Document reset, boot, recovery, update transport, memory map, calibration, and codec hosting in this hardware page.
    Keep observations and sources separate from hypotheses.
